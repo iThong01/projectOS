@@ -21,7 +21,7 @@ int readBoard(Project *project, char *fileName){
     if (file_ptr == NULL)
         return 1;
 
-    char buffer[255];
+    char buffer[BOARDID_SIZE + BOARD_TITLE_SIZE + 2];
     int i = 0;
     int fd = fileno(file_ptr);
     flock(fd, LOCK_EX);
@@ -37,8 +37,10 @@ int readBoard(Project *project, char *fileName){
         // 3. Check if tokens exist before using them
         if (boardId != NULL && boardTitle != NULL)
         {
-            strcpy(project->boards[i].boardId, boardId);
-            strcpy(project->boards[i].boardTitle, boardTitle);
+            strncpy(project->boards[i].boardId,boardId,sizeof(project->boards[i].boardId) - 1);
+            project->boards[i].boardId[sizeof(project->boards[i].boardId) - 1] = '\0';
+            strncpy(project->boards[i].boardTitle,boardTitle,sizeof(project->boards[i].boardTitle) - 1);
+            project->boards[i].boardTitle[sizeof(project->boards[i].boardTitle) - 1] = '\0';
             i++;
         }
     }
@@ -60,7 +62,7 @@ int saveBoard(Project *project,  char *fileName){
     int fd = fileno(file_ptr);
     flock(fd, LOCK_EX);
     Board *boards = project->boards;
-    for (int i = 0; i < MAX_BOARD; i++)
+    for (int i = 0; i <project->totalBoards; i++) //วนตามบอร์ดที่มีอยู่ ไม่ต้องวนทั้งหดม
     {
         fprintf(file_ptr, "%s,%s\n", boards[i].boardId, boards[i].boardTitle);
     }
@@ -150,18 +152,45 @@ int saveAllTasks(Project *project, char *fileName){
     fclose(file_ptr);
     return 0;
 }
+static int getNextBoardId(Project *project){
+    int maxId = 0;
+    for (int i = 0; i < project->totalBoards; i++){
+        int id = atoi(project->boards[i].boardId);
+        if (id > maxId) maxId = id;
+    }
+    return maxId + 1;
+}
+
 int addBoard(Project *project, char *boardTitle){
-    
-    snprintf(project->boards[project->totalBoards].boardId, 
-            sizeof(project->boards[project->totalBoards].boardId), 
-            "%d", project->totalBoards+1);
-    strcpy(project->boards[project->totalBoards].boardTitle, boardTitle);
+    if(project == NULL || boardTitle ==NULL) return 1;
+    if(project->totalBoards >= MAX_BOARD) return 1; 
+    if(isEmptyOrSpace(boardTitle)) return 1;
+    Board *board = &project->boards[project->totalBoards];
+    snprintf(board->boardId,sizeof(board->boardId), "%d" , getNextBoardId(project));
+    strncpy(board->boardTitle,boardTitle,sizeof(board->boardTitle)-1);
+
+    board->boardTitle[sizeof(board->boardTitle)-1] = '\0';
+    board->totalTasks = 0;
     project->totalBoards++;
     return 0;
 }
+static int getNextTaskId(Board *board){
+    int maxId = 0;
+    for (int i = 0; i < board->totalTasks; i++){
+        int id = atoi(board->tasks[i].taskId);
+        if (id > maxId) maxId = id;
+    }
+    return maxId + 1;
+}
 int addTask(Board *board, char *taskTitle){
-    snprintf(board->tasks[board->totalTasks].taskId, sizeof(board->tasks[board->totalTasks].taskId), "%d", board->totalTasks + 1);
-    strcpy(board->tasks[board->totalTasks].taskTitle, taskTitle);
+    if(board == NULL || taskTitle ==NULL) return 1;
+    if(board->totalTasks >= MAX_TASK) return 1;
+    if(isEmptyOrSpace(taskTitle)) return 1;
+    Task *task = &board->tasks[board->totalTasks];
+    snprintf(task->taskId, sizeof(task->taskId), "%d", getNextTaskId(board));
+    strncpy(task->taskTitle, taskTitle,sizeof(task->taskTitle) - 1);
+    task->taskTitle[sizeof(task->taskTitle) - 1] ='\0';
+    task->isFinish = 0;
     board->totalTasks++;
     return 0;
 }
@@ -189,4 +218,40 @@ Task *hasTask(Project *project, char *boardId, char *taskId){
         }
     }
     return task;
+}
+int deleteTask(Project *project, char *boardId, char *taskId){
+    if (project == NULL || boardId == NULL || taskId == NULL) return 1;
+
+    Board *board = hasBoard(project, boardId);
+
+    if (board == NULL) return 1;
+    int index = -1;
+    for (int i = 0; i < board->totalTasks; i++){
+        if (strcmp(board->tasks[i].taskId, taskId) == 0){
+            index = i;
+            break;
+        }
+    }
+    if (index == -1) return 1;
+    for (int i = index; i < board->totalTasks - 1; i++){
+        board->tasks[i] = board->tasks[i + 1];
+    }
+    board->totalTasks--;
+    return 0;
+}
+int deleteBoard(Project *project, char *boardId){
+    if (project == NULL || boardId == NULL) return 1;
+    int index = -1;
+    for (int i = 0; i < project->totalBoards; i++){
+        if (strcmp(project->boards[i].boardId, boardId) == 0){
+            index = i;
+            break;
+        }
+    }
+    if (index == -1) return 1;
+    for (int i = index; i < project->totalBoards - 1; i++){
+        project->boards[i] = project->boards[i + 1];
+    }
+    project->totalBoards--;
+    return 0;
 }

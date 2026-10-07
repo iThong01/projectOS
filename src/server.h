@@ -1,12 +1,12 @@
 #ifndef SERVER_H 
 #define SERVER_H
 
-
 #define _POSIX_C_SOURCE 200112L
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -47,7 +47,7 @@ typedef struct {
 // Server
 void handleAddBoard(CommandContext *ctx);
 void handleAddTask(CommandContext *ctx);
-
+void handleDeleteTask(CommandContext *ctx);
 
 // Common
 int handleClient(SOCKET socket_client,char *read);

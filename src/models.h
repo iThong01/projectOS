@@ -49,4 +49,6 @@ int addBoard(Project *project, char *boardTitle);
 int addTask(Board *board, char *taskTitle);
 Board *hasBoard(Project *project, char *boardId);
 Task *hasTask(Project *project, char *boardId, char *taskId);
+int deleteBoard(Project *project, char *boardId);
+int deleteTask(Project *project, char *boardId, char *taskId);
 #endif

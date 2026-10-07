@@ -1,8 +1,7 @@
 #include "server.h"
 
-#include "server.h"
 #include <signal.h>
-#include <sys/mman.h>
+
 #include <semaphore.h>
 #include <fcntl.h>    /* For O_CREAT, O_RDWR constants */
 #include <sys/stat.h> /* For mode constants like 0644 */
@@ -89,7 +88,50 @@ void handleAddTask(CommandContext *ctx)
     }
     send(ctx->clientSocket, response, strlen(response), 0);
 }
+void handleDeleteTask(CommandContext *ctx){
+  char* boardId = strtok_r(NULL,COMMAND_SEPARATOR,&ctx->rawInput);
+  char* taskId = strtok_r(NULL,COMMAND_SEPARATOR,&ctx->rawInput);
+  char response[MESSAGE_SIZE];
+  if(boardId==nullptr || taskId==nullptr||isEmptyOrSpace(boardId)||isEmptyOrSpace(taskId)){
+    snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
+    COMMAND_SEPARATOR,STATUS_INVALID_ARGUMENTS);
+    send(ctx->clientSocket,response,strlen(response),0);
+    return;
+  }
 
+  Board *board = hasBoard(ctx->project,boardId);
+  if(boardId ==NULL){
+    snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
+            COMMAND_SEPARATOR,STATUS_BOARD_NOT_FOUND);
+    send(ctx->clientSocket, response, strlen(response), 0);
+    return;
+  }
+
+  Task *task = hasTask(ctx->project, boardId, taskId);
+    if (task == NULL){
+        snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
+            COMMAND_SEPARATOR,STATUS_TASK_NOT_FOUND);
+        send(ctx->clientSocket, response, strlen(response), 0);
+        return;
+    }
+
+    sem_wait(sem);
+    int result = deleteTask(ctx->project, boardId, taskId);
+
+    if (result == 0){
+        saveAllTasks(ctx->project, TASK_FILENAME);
+    }
+
+    sem_post(sem);
+    if (result == 0){
+        snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
+            COMMAND_SEPARATOR,STATUS_OK);
+    }else{
+        snprintf(response,sizeof(response),"%s%s%d\n",
+        COMMAND_DELETE_TASK,COMMAND_SEPARATOR,STATUS_FAIL);
+    }
+    send(ctx->clientSocket, response, strlen(response), 0);
+}
 int handleClient(SOCKET socket_client, char *read)
 {
   // printf("line: %s\n", read);
@@ -109,6 +151,7 @@ int handleClient(SOCKET socket_client, char *read)
   CommandEntry commandTable[] = {
       {COMMAND_ADD_BOARD, handleAddBoard},
       {COMMAND_ADD_TASK, handleAddTask},
+      {COMMAND_DELETE_TASK, handleDeleteTask},
       {NULL, NULL} // Sentinel to mark the end
   };
 
@@ -176,8 +219,9 @@ int setup(char *port)
 
   printf("Creating socket...\n");
 
-  socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype,
-                         bind_address->ai_protocol);
+  socket_listen = socket(bind_address->ai_family, 
+                        bind_address->ai_socktype,
+                        bind_address->ai_protocol);
   if (!ISVALIDSOCKET(socket_listen))
   {
     fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
@@ -186,8 +230,7 @@ int setup(char *port)
 
   // Allow socket address reuse
   int yes = 1;
-  if (setsockopt(socket_listen, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) <
-      0)
+  if (setsockopt(socket_listen, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0)
   {
     fprintf(stderr, "setsockopt() failed. (%d)\n", GETSOCKETERRNO());
     return 1;
@@ -240,7 +283,7 @@ int setup(char *port)
       while (1)
       {
         char read[1024];
-        int bytes_received = recv(socket_client, read, 1024, 0);
+        int bytes_received = recv(socket_client, read, sizeof(read) - 1, 0);
         if (bytes_received < 1)
         {
           printf("Client disconnected.\n");
@@ -248,6 +291,8 @@ int setup(char *port)
           CLOSESOCKET(socket_client);
           exit(0);
         }
+        read[bytes_received] = '\0';
+        
         int j;
         for (j = 0; j < bytes_received; ++j)
           read[j] = read[j];
