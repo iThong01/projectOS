@@ -47,7 +47,12 @@ typedef struct {
 // Server
 void handleAddBoard(CommandContext *ctx);
 void handleAddTask(CommandContext *ctx);
+void handleGetBoards(CommandContext *ctx);   
+void handleGetTask(CommandContext *ctx);   //not done 
+void handleUpdateBoard(CommandContext *ctx);//not done 
+void handleUpdateTask(CommandContext *ctx);//not done 
 void handleDeleteTask(CommandContext *ctx);
+void handleDeleteBoard(CommandContext *ctx);
 
 // Common
 int handleClient(SOCKET socket_client,char *read);

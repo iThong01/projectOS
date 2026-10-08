@@ -13,9 +13,6 @@
 #define BOARD_FILENAME "board.txt"
 #define TASK_FILENAME "task.txt"
 
-
-
-
 typedef struct task Task;
 
 struct task {
@@ -51,4 +48,6 @@ Board *hasBoard(Project *project, char *boardId);
 Task *hasTask(Project *project, char *boardId, char *taskId);
 int deleteBoard(Project *project, char *boardId);
 int deleteTask(Project *project, char *boardId, char *taskId);
+int updateBoard(Project *project,char * boardId);
+int updateTask(Project *project,char * boardId,char *taskId);
 #endif

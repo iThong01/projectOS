@@ -255,3 +255,5 @@ int deleteBoard(Project *project, char *boardId){
     project->totalBoards--;
     return 0;
 }
+int updateBoard(Project *project,char * boardId){}
+int updateTask(Project *project,char * boardId,char *taskId){}

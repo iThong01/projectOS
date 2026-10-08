@@ -2,9 +2,14 @@
 #define PROTOCOL_H
 
 
-#define COMMAND_ADD_BOARD "ADD_BOARD"      // ADD BOARD
-#define COMMAND_ADD_TASK "ADD_TASK"      // ADD TASK
-#define COMMAND_DELETE_TASK "DELETE_TASK"
+#define COMMAND_ADD_BOARD "Add_Board"
+#define COMMAND_ADD_TASK "Add_Task"
+#define COMMAND_GET_BOARDS "Get_Boards" 
+#define COMMAND_GET_TASK "Get_Task"  //not done
+#define COMMAND_UPDATE_BOARD "Update_Board"  //not done
+#define COMMAND_UPDATE_TASK "Update_Task"  //not done
+#define COMMAND_DELETE_TASK "Delete_Task"
+#define COMMAND_DELETE_BOARD "Delete_Board"
 #define COMMAND_SEPARATOR ","
 #define COMMAND_UNKNOWN "UNKNOWN"
 
@@ -20,6 +25,7 @@ typedef enum {
     STATUS_EMPTY_BOARD = 202,
     STATUS_TASK_NOT_FOUND = 203,
     STATUS_EMPTY_TASK = 204,
+    STATUS_BOARD_NOT_EMPTY = 205,
 
     // --- 5xXX: Server/System Errors (500+) ---
     STATUS_SAVE_BOARD_FAIL = 500,
