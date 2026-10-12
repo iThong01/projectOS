@@ -28,6 +28,7 @@
 #define GETSOCKETERRNO() (errno)
 #define SERVER_PORT "3030"
 #define MESSAGE_SIZE 2000
+#define RESPONSE_SIZE 200
 
 typedef struct {
     Project *project;
@@ -48,8 +49,9 @@ typedef struct {
 void handleAddBoard(CommandContext *ctx);
 void handleAddTask(CommandContext *ctx);
 void handleGetBoards(CommandContext *ctx);   
-void handleGetTask(CommandContext *ctx);   //not done 
-void handleUpdateBoard(CommandContext *ctx);//not done 
+void handleGetTask(CommandContext *ctx);
+void handleUpdateTaskStatus(CommandContext *ctx);
+void handleUpdateBoard(CommandContext *ctx);
 void handleUpdateTask(CommandContext *ctx);//not done 
 void handleDeleteTask(CommandContext *ctx);
 void handleDeleteBoard(CommandContext *ctx);

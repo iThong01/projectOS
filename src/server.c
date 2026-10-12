@@ -1,5 +1,5 @@
 #include "server.h"
-
+#include "models.h"
 #include <signal.h>
 
 #include <semaphore.h>
@@ -10,8 +10,7 @@ SOCKET socket_listen = -1;
 Project *project = NULL;
 sem_t *sem = NULL;
 
-void handleAddBoard(CommandContext *ctx)
-{
+void handleAddBoard(CommandContext *ctx){
   char *boardTitle = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
 
   char response[MESSAGE_SIZE];
@@ -43,7 +42,6 @@ void handleAddBoard(CommandContext *ctx)
     }
   }
 }
-
 void handleAddTask(CommandContext *ctx)
 {
     char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
@@ -88,28 +86,22 @@ void handleAddTask(CommandContext *ctx)
     }
     send(ctx->clientSocket, response, strlen(response), 0);
 }
-
 void handleGetBoards(CommandContext *ctx){
   char response[64+MAX_BOARD*(BOARDID_SIZE+BOARD_TITLE_SIZE+2)];
-  size_t offset = 0
-  
+  size_t offset = 0;
   sem_wait(sem);
-  int count = ctx->project->totalBoards;
-    int n = snprintf(response,sizeof(response),"%s,%d,%d\n",
-        COMMAND_GET_BOARDS,STATUS_OK,count);
 
-    if (n < 0 || (size_t)n >= sizeof(response)){
+  int count = ctx->project->totalBoards;
+    int n = snprintf(response,sizeof(response),"%s,%d,%d\n",COMMAND_GET_BOARDS,STATUS_OK,count);
+    if(n < 0 || (size_t)n >= sizeof(response)){
         sem_post(sem);
         return;
     }
     offset = (size_t)n;
-
     for (int i = 0; i < count; i++){
         Board *board = &ctx->project->boards[i];
-        n = snprintf(response + offset,sizeof(response) - offset,
-            "%s,%s\n",board->boardId,board->boardTitle);
-
-        if (n < 0 || (size_t)n >= sizeof(response) - offset){
+        n = snprintf(response + offset,sizeof(response) - offset,"%s,%s\n",board->boardId,board->boardTitle);
+        if(n < 0 || (size_t)n >= sizeof(response) - offset){
             sem_post(sem);
             return;
         }
@@ -117,103 +109,229 @@ void handleGetBoards(CommandContext *ctx){
     }
     sem_post(sem);
     size_t sent = 0;
-
     while (sent < offset){
-        ssize_t nsend = send(ctx->clientSocket,response + sent,
-            offset - sent,0);
+        ssize_t nsend = send(ctx->clientSocket,response + sent,offset - sent,0);
         if (nsend <= 0) return;
         sent += (size_t)nsend;
     }
 }
+void handleGetTask(CommandContext *ctx){
+  char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    if(boardId ==NULL || isEmptyOrSpace(boardId)){
+      char response[RESPONSE_SIZE];
+      snprintf(response, sizeof(response), "%s,%d\n",COMMAND_GET_TASK, STATUS_INVALID_ARGUMENTS);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
 
-void handleGetTask(CommandContext *ctx){}
+    sem_wait(sem);
+    Board *board = hasBoard(ctx->project, boardId);
+    if(board== NULL) {
+      sem_post(sem);
+      char response[RESPONSE_SIZE];
+      snprintf(response, sizeof(response), "%s,%d\n",COMMAND_GET_TASK, STATUS_BOARD_NOT_FOUND);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+    char response[64 + MAX_TASK * (TASKID_SIZE + TASK_TITLE_SIZE + 8)];
+    size_t used = 0;
+    used += snprintf(response, sizeof(response),"Get_Task,0,%d\n", board->totalTasks);
 
-void handleUpdateBoard(CommandContext *ctx){}
+    for (int i = 0; i < board->totalTasks; i++) {
+        Task *task = &board->tasks[i];
+        used += snprintf(response + used, sizeof(response) - used,"%s,%s,%d\n",
+                        task->taskId,task->taskTitle,task->isFinish);
+    }
+    sem_post(sem); // ส่งข้อมูลกลับ Client
+  
+    size_t sent = 0;
+    while (sent < used) {
+        ssize_t n = send(ctx->clientSocket,response + sent, used - sent, 0);
+        if(n <= 0){
+            perror("send");
+            return;
+        }
+        sent += (size_t)n;
+    }
+}
+void handleUpdateTaskStatus(CommandContext *ctx){
+    char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    char *taskId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    char *status = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
 
-void handleUpdateTask(CommandContext *ctx){}
+    if(boardId == NULL || taskId == NULL || status == NULL ||isEmptyOrSpace(boardId) || isEmptyOrSpace(taskId) ||
+        (strcmp(status, "0") != 0 && strcmp(status, "1") != 0)) {
+      char response[RESPONSE_SIZE];
+      snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_INVALID_ARGUMENTS);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+
+    sem_wait(sem);
+    Board *board = hasBoard(ctx->project, boardId);
+    if(board == NULL){
+      sem_post(sem);
+      char response[RESPONSE_SIZE];
+      snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_BOARD_NOT_FOUND);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+
+    Task *task = hasTask(ctx->project, boardId, taskId);
+    if(task == NULL){
+      sem_post(sem);
+      char response[RESPONSE_SIZE];
+      snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_TASK_NOT_FOUND);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+
+    int oldStatus = task->isFinish;
+    task->isFinish = status[0] - '0';
+
+    int result = saveAllTasks(ctx->project, TASK_FILENAME);
+    if (result != 0) {
+      task->isFinish = oldStatus;
+      sem_post(sem);
+      char response[RESPONSE_SIZE];
+      snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_SAVE_TASK_FAIL);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+
+    sem_post(sem);
+    char response[RESPONSE_SIZE];
+    snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_OK);
+    send(ctx->clientSocket, response, strlen(response), 0);
+}
+void handleUpdateBoard(CommandContext *ctx){
+    char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    char *newTitle = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    if(boardId == NULL || newTitle == NULL ||isEmptyOrSpace(boardId) || isEmptyOrSpace(newTitle) ||
+      strlen(newTitle) >= BOARD_TITLE_SIZE){
+      char response[100];
+      snprintf(response, sizeof(response),"%s,%d\n", COMMAND_UPDATE_BOARD, STATUS_INVALID_ARGUMENTS);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+    sem_wait(sem);
+    Board *board = hasBoard(ctx->project, boardId);
+    if(board == NULL){
+      sem_post(sem);
+      char response[100];
+      snprintf(response, sizeof(response),"%s,%d\n", COMMAND_UPDATE_BOARD, STATUS_BOARD_NOT_FOUND);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+
+    char oldTitle[BOARD_TITLE_SIZE];
+    strcpy(oldTitle, board->boardTitle);
+    strcpy(board->boardTitle, newTitle);
+
+    int result = updateBoard(ctx->project, boardId, newTitle);
+    if(result != 0) strcpy(board->boardTitle, oldTitle);
+
+    sem_post(sem);
+    if(result != 0){
+      char response[100];
+      snprintf(response, sizeof(response),"%s,%d\n", COMMAND_UPDATE_BOARD, STATUS_SAVE_BOARD_FAIL);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+    char response[100];
+    snprintf(response, sizeof(response),"%s,%d\n", COMMAND_UPDATE_BOARD, STATUS_OK);
+    send(ctx->clientSocket, response, strlen(response), 0);
+}
+void handleUpdateTask(CommandContext *ctx){
+    char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    char *taskId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+    char *newTitle = strtok_r(NULL, "\n\r", &ctx->rawInput);
+    if(!boardId || !taskId || !newTitle ||isEmptyOrSpace(newTitle) ||strlen(newTitle) >= TASK_TITLE_SIZE){
+      // send(ctx->clientSocket,sizeof(&newTitle),COMMAND_UPDATE_TASK,STATUS_INVALID_ARGUMENTS);
+      char response[RESPONSE_SIZE];
+      snprintf(response, sizeof(response),"%s,%d\n", COMMAND_UPDATE_BOARD, STATUS_INVALID_ARGUMENTS);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+    sem_wait(sem);
+    Task *task = hasTask(ctx->project, boardId, taskId);
+    if(task == NULL){
+      sem_post(sem);
+      char response[RESPONSE_SIZE];
+      snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,STATUS_TASK_NOT_FOUND);
+      send(ctx->clientSocket, response, strlen(response), 0);
+      return;
+    }
+    char oldTitle[TASK_TITLE_SIZE];
+    strcpy(oldTitle, task->taskTitle);
+    strcpy(task->taskTitle, newTitle);
+
+    int result = updateTask(ctx->project, boardId, taskId, newTitle);
+    if (result != 0) strcpy(task->taskTitle, oldTitle);
+    sem_post(sem);
+    // send(ctx->clientSocket,COMMAND_UPDATE_TASK,result == 0 ? STATUS_OK : STATUS_SAVE_TASK_FAIL);
+    char response[RESPONSE_SIZE];
+    snprintf(response,sizeof(response),"%s,%d\n",COMMAND_UPDATE_TASK_STATUS,result == 0 ? STATUS_OK : STATUS_SAVE_TASK_FAIL);
+    send(ctx->clientSocket, response, strlen(response), 0);
+}
 
 void handleDeleteTask(CommandContext *ctx){
-  char* boardId = strtok_r(NULL,COMMAND_SEPARATOR,&ctx->rawInput);
-  char* taskId = strtok_r(NULL,COMMAND_SEPARATOR,&ctx->rawInput);
-  char response[MESSAGE_SIZE];
-  if(boardId==nullptr || taskId==nullptr||isEmptyOrSpace(boardId)||isEmptyOrSpace(taskId)){
-    snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
-    COMMAND_SEPARATOR,STATUS_INVALID_ARGUMENTS);
-    send(ctx->clientSocket,response,strlen(response),0);
-    return;
-  }
-
-  Board *board = hasBoard(ctx->project,boardId);
-  if(boardId ==NULL){
-    snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
-            COMMAND_SEPARATOR,STATUS_BOARD_NOT_FOUND);
-    send(ctx->clientSocket, response, strlen(response), 0);
-    return;
-  }
-
-  Task *task = hasTask(ctx->project, boardId, taskId);
-    if (task == NULL){
-        snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
-            COMMAND_SEPARATOR,STATUS_TASK_NOT_FOUND);
-        send(ctx->clientSocket, response, strlen(response), 0);
-        return;
-    }
-
-    sem_wait(sem);
-    int result = deleteTask(ctx->project, boardId, taskId);
-
-    if (result == 0){
-        saveAllTasks(ctx->project, TASK_FILENAME);
-    }
-
-    sem_post(sem);
-    if (result == 0){
-        snprintf(response,sizeof(response),"%s%s%d\n",COMMAND_DELETE_TASK,
-            COMMAND_SEPARATOR,STATUS_OK);
-    }else{
-        snprintf(response,sizeof(response),"%s%s%d\n",
-        COMMAND_DELETE_TASK,COMMAND_SEPARATOR,STATUS_FAIL);
-    }
-    send(ctx->clientSocket, response, strlen(response), 0);
-}
-
-void handleDeleteBoard(CommandContext *ctx){
-  char* boardId = strtok_r(NULL,COMMAND_SEPARATOR,&ctx->rawInput);
+  char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+  char *taskId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
   char response[MESSAGE_SIZE];
   int status;
-  if(isEmptyOrSpace(boardId)){
-    status = STATUS_INVALID_ARGUMENTS;
+  if (isEmptyOrSpace(boardId) || isEmptyOrSpace(taskId)){
+      status = STATUS_INVALID_ARGUMENTS;
   }else{
-    sem_wait(sem);
-    Board* board =hasBoard(ctx->project,boardId);
-    if(board ==nullptr){
-      status = STATUS_BOARD_NOT_FOUND;
-    }else if(board->totalTasks>0){
-      status = STATUS_BOARD_NOT_EMPTY;
-    }else{
-      int result = deleteBoard(ctx->project,boardId);
-      if(result ==0){
-        int save = saveBoard(ctx->project,BOARD_FILENAME);
-        status = (save ==0) ? STATUS_OK : STATUS_SAVE_BOARD_FAIL;
+      sem_wait(sem);
+      Board *board = hasBoard(ctx->project, boardId);
+      if (board == NULL){
+          status = STATUS_BOARD_NOT_FOUND;
       }else{
-        status = STATUS_FAIL;
+          Task *task = hasTask(ctx->project, boardId, taskId);
+          if (task == NULL){
+              status = STATUS_TASK_NOT_FOUND;
+          }else{
+              int result = deleteTask(ctx->project, boardId, taskId);
+              status = (result == 0)? STATUS_OK: STATUS_SAVE_TASK_FAIL;
+          }
       }
-    }
-    sem_post(sem);
+      sem_post(sem);
   }
-  snprintf(response, sizeof(response), "%s%s%d\n",COMMAND_DELETE_BOARD,
-   COMMAND_SEPARATOR, status);
-
+  snprintf(response, sizeof(response), "%s%s%d\n",COMMAND_DELETE_TASK,COMMAND_SEPARATOR,status);
   send(ctx->clientSocket, response, strlen(response), 0);
 }
-
-int handleClient(SOCKET socket_client, char *read)
-{
+void handleDeleteBoard(CommandContext *ctx){
+  char *boardId = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
+  char response[MESSAGE_SIZE];
+  int status;
+  if (isEmptyOrSpace(boardId)){
+      status = STATUS_INVALID_ARGUMENTS;
+  }else{
+      sem_wait(sem);
+      Board *board = hasBoard(ctx->project, boardId);
+      if (board == NULL){
+        status = STATUS_BOARD_NOT_FOUND;
+      }
+      else if (board->totalTasks > 0){
+          status = STATUS_BOARD_NOT_EMPTY;
+      }else{
+          int result = deleteBoard(ctx->project, boardId);
+          status = (result == 0)? STATUS_OK: STATUS_SAVE_BOARD_FAIL;
+      }
+      sem_post(sem);
+  }
+  snprintf(response, sizeof(response),"%s%s%d\n",COMMAND_DELETE_BOARD,COMMAND_SEPARATOR,status);
+  send(ctx->clientSocket, response, strlen(response), 0);
+}
+int handleClient(SOCKET socket_client, char *read){
   // printf("line: %s\n", read);
   char response[MESSAGE_SIZE];
   char *saveptr;
   char *commandName = strtok_r(read, ",\n\r", &saveptr);
-
+  printf("DEBUG commandName: [%s]\n",
+       commandName != NULL ? commandName : "NULL");
+       
   if (commandName == NULL)
     return -1;
 
@@ -226,6 +344,11 @@ int handleClient(SOCKET socket_client, char *read)
   CommandEntry commandTable[] = {
       {COMMAND_ADD_BOARD, handleAddBoard},
       {COMMAND_ADD_TASK, handleAddTask},
+      {COMMAND_GET_BOARDS,handleGetBoards},
+      {COMMAND_GET_TASK,handleGetTask},
+      {COMMAND_UPDATE_BOARD,handleUpdateBoard},
+      {COMMAND_UPDATE_TASK,handleUpdateTask},
+      {COMMAND_UPDATE_TASK_STATUS,handleUpdateTaskStatus},
       {COMMAND_DELETE_TASK, handleDeleteTask},
       {COMMAND_DELETE_BOARD, handleDeleteBoard},
       {NULL, NULL} // Sentinel to mark the end
@@ -245,7 +368,6 @@ int handleClient(SOCKET socket_client, char *read)
   send(socket_client, response, strlen(response), 0);
   return -1;
 }
-
 void handle_shutdown(int sig)
 {
   if (sig == SIGINT)

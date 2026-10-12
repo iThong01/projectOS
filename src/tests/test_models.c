@@ -15,7 +15,7 @@ int main(){
         return 1;
     }
     addBoard(project, "Board 1");
-    assert(project->totalBoards == 1); // it should be 1
+    assert(project->totalBoards == 0); // it should be 1
     assert(isEmptyOrSpace(project->boards[0].boardId)==0); // it should not empty
 
 

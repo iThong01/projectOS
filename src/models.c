@@ -1,4 +1,7 @@
 #include "models.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 int loadProject(Project *project, char *boardFileName, char *taskFileName){
     if(readBoard(project, boardFileName) == 1){
@@ -49,25 +52,55 @@ int readBoard(Project *project, char *fileName){
     fclose(file_ptr);
     return 0;
 }
-int saveBoard(Project *project,  char *fileName){
-    FILE *file_ptr;
+int saveBoard(Project *project, char *fileName){
+    if (project == NULL || fileName == NULL) return 1;
+    char tempName[512];
+    int n = snprintf(tempName, sizeof(tempName),"%s.tmpXXXXXX", fileName);
 
-    file_ptr = fopen(fileName, "w");
-
-    if (file_ptr == NULL)
-    {
-        printf("Error opening file!\n");
+    if (n < 0 || (size_t)n >= sizeof(tempName)) return 1;
+    int fd = mkstemp(tempName);
+    if (fd == -1){
+        perror("mkstemp");
         return 1;
     }
-    int fd = fileno(file_ptr);
-    flock(fd, LOCK_EX);
-    Board *boards = project->boards;
-    for (int i = 0; i <project->totalBoards; i++) //วนตามบอร์ดที่มีอยู่ ไม่ต้องวนทั้งหดม
-    {
-        fprintf(file_ptr, "%s,%s\n", boards[i].boardId, boards[i].boardTitle);
+    FILE *file_ptr = fdopen(fd, "w");
+    if (file_ptr == NULL){
+        perror("fdopen");
+        close(fd);
+        remove(tempName);
+        return 1;
     }
-    flock(fd, LOCK_UN);
-    fclose(file_ptr);
+    for (int i = 0; i < project->totalBoards; i++){
+        Board *board = &project->boards[i];
+        if(fprintf(file_ptr, "%s,%s\n",board->boardId,board->boardTitle) < 0){
+            perror("fprintf");
+            fclose(file_ptr);
+            remove(tempName);
+            return 1;
+        }
+    }
+    if (fflush(file_ptr) != 0){
+        perror("fflush");
+        fclose(file_ptr);
+        remove(tempName);
+        return 1;
+    }
+    if (fsync(fd) != 0){
+        perror("fsync");
+        fclose(file_ptr);
+        remove(tempName);
+        return 1;
+    }
+    if (fclose(file_ptr) != 0){
+        perror("fclose");
+        remove(tempName);
+        return 1;
+    }
+    if (rename(tempName, fileName) != 0){
+        perror("rename");
+        remove(tempName);
+        return 1;
+    }
     return 0;
 }
 int readAllTasks(Project *project, char *fileName){
@@ -129,27 +162,59 @@ int readAllTasks(Project *project, char *fileName){
     return 0;
 }
 int saveAllTasks(Project *project, char *fileName){
-    FILE *file_ptr = fopen(fileName, "w");
-    if (file_ptr == NULL) {
-        printf("Error opening file!\n");
+    if (project == NULL || fileName == NULL) return 1;
+
+    char tempName[512];
+    int n = snprintf(tempName, sizeof(tempName), "%s.tmpXXXXXX", fileName);
+    if (n < 0 || (size_t)n >= sizeof(tempName)) return 1;
+
+    int fd = mkstemp(tempName);
+    if (fd == -1){
+        perror("mkstemp");
         return 1;
     }
-    int fd = fileno(file_ptr);
-    flock(fd, LOCK_EX);
-
-    for (int b = 0; b < project->totalBoards; b++) {
+    FILE *file_ptr = fdopen(fd, "w");
+    if (file_ptr == NULL){
+        perror("fdopen");
+        close(fd);
+        remove(tempName);
+        return 1;
+    }
+    for (int b = 0; b < project->totalBoards; b++){
         Board *board = &project->boards[b];
-        for (int i = 0; i < board->totalTasks; i++) {
-            fprintf(file_ptr, "%s,%s,%s,%d\n",
-                    board->boardId,
-                    board->tasks[i].taskId,
-                    board->tasks[i].taskTitle,
-                    board->tasks[i].isFinish);
+        for (int i = 0; i < board->totalTasks; i++){
+            Task *task = &board->tasks[i];
+            if(fprintf(file_ptr, "%s,%s,%s,%d\n",board->boardId,
+                        task->taskId,task->taskTitle,task->isFinish) < 0){
+                perror("fprintf");
+                fclose(file_ptr);
+                remove(tempName);
+                return 1;
+            }
         }
     }
-
-    flock(fd, LOCK_UN);
-    fclose(file_ptr);
+    if(fflush(file_ptr) != 0){
+        perror("fflush");
+        fclose(file_ptr);
+        remove(tempName);
+        return 1;
+    }
+    if (fsync(fd) != 0){
+        perror("fsync");
+        fclose(file_ptr);
+        remove(tempName);
+        return 1;
+    }
+    if (fclose(file_ptr) != 0){
+        perror("fclose");
+        remove(tempName);
+        return 1;
+    }
+    if (rename(tempName, fileName) != 0){
+        perror("rename");
+        remove(tempName);
+        return 1;
+    }
     return 0;
 }
 static int getNextBoardId(Project *project){
@@ -160,7 +225,6 @@ static int getNextBoardId(Project *project){
     }
     return maxId + 1;
 }
-
 int addBoard(Project *project, char *boardTitle){
     if(project == NULL || boardTitle ==NULL) return 1;
     if(project->totalBoards >= MAX_BOARD) return 1; 
@@ -221,10 +285,9 @@ Task *hasTask(Project *project, char *boardId, char *taskId){
 }
 int deleteTask(Project *project, char *boardId, char *taskId){
     if (project == NULL || boardId == NULL || taskId == NULL) return 1;
-
     Board *board = hasBoard(project, boardId);
-
     if (board == NULL) return 1;
+
     int index = -1;
     for (int i = 0; i < board->totalTasks; i++){
         if (strcmp(board->tasks[i].taskId, taskId) == 0){
@@ -233,14 +296,27 @@ int deleteTask(Project *project, char *boardId, char *taskId){
         }
     }
     if (index == -1) return 1;
+
+    Task deletedTask = board->tasks[index];
+
     for (int i = index; i < board->totalTasks - 1; i++){
         board->tasks[i] = board->tasks[i + 1];
     }
     board->totalTasks--;
+
+    if (saveAllTasks(project, TASK_FILENAME) != 0){
+        for (int i = board->totalTasks; i > index; i--){
+            board->tasks[i] = board->tasks[i - 1];
+        }
+        board->tasks[index] = deletedTask;
+        board->totalTasks++;
+        return 1;
+    }
     return 0;
 }
 int deleteBoard(Project *project, char *boardId){
     if (project == NULL || boardId == NULL) return 1;
+
     int index = -1;
     for (int i = 0; i < project->totalBoards; i++){
         if (strcmp(project->boards[i].boardId, boardId) == 0){
@@ -249,11 +325,58 @@ int deleteBoard(Project *project, char *boardId){
         }
     }
     if (index == -1) return 1;
+
+    Board *backup = malloc(sizeof(Board));
+    if (backup == NULL) return 1;
+
+    *backup = project->boards[index];
+
     for (int i = index; i < project->totalBoards - 1; i++){
         project->boards[i] = project->boards[i + 1];
     }
     project->totalBoards--;
+
+    if (saveBoard(project, BOARD_FILENAME) != 0){
+        for (int i = project->totalBoards; i > index; i--){
+            project->boards[i] = project->boards[i - 1];
+        }
+        project->boards[index] = *backup;
+        project->totalBoards++;
+        free(backup);
+        return 1;
+    }
+    free(backup);
     return 0;
 }
-int updateBoard(Project *project,char * boardId){}
-int updateTask(Project *project,char * boardId,char *taskId){}
+int updateBoard(Project *project, char *boardId, char *newTitle){
+    Board *board = hasBoard(project, boardId);
+    if (board == NULL) return 1;
+    if (newTitle == NULL || strlen(newTitle) >= BOARD_TITLE_SIZE) return 1;
+
+    char oldTitle[BOARD_TITLE_SIZE];
+    strcpy(oldTitle, board->boardTitle);
+    strncpy(board->boardTitle,newTitle,sizeof(board->boardTitle)-1);
+    board->boardTitle[sizeof(board->boardTitle)-1] = '\0';
+
+    if (saveBoard(project, BOARD_FILENAME) != 0){
+        strcpy(board->boardTitle, oldTitle);
+        return 1;
+    }
+    return 0;
+}
+int updateTask(Project *project, char *boardId,char *taskId, char *newTitle){
+    Task *task = hasTask(project, boardId, taskId);
+    if (task == NULL) return 1;
+    if (newTitle == NULL || strlen(newTitle) >= TASK_TITLE_SIZE) return 1;
+
+    char oldTitle[TASK_TITLE_SIZE];
+    strcpy(oldTitle, task->taskTitle);
+    strncpy(task->taskTitle, newTitle,sizeof(task->taskTitle) - 1);
+
+    task->taskTitle[sizeof(task->taskTitle) - 1] = '\0';
+    if (saveAllTasks(project, TASK_FILENAME) != 0){
+        strcpy(task->taskTitle, oldTitle);
+        return 1;
+    }
+    return 0;
+}

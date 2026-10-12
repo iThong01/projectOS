@@ -5,9 +5,10 @@
 #define COMMAND_ADD_BOARD "Add_Board"
 #define COMMAND_ADD_TASK "Add_Task"
 #define COMMAND_GET_BOARDS "Get_Boards" 
-#define COMMAND_GET_TASK "Get_Task"  //not done
-#define COMMAND_UPDATE_BOARD "Update_Board"  //not done
-#define COMMAND_UPDATE_TASK "Update_Task"  //not done
+#define COMMAND_GET_TASK "Get_Task" 
+#define COMMAND_UPDATE_BOARD "Update_Board" 
+#define COMMAND_UPDATE_TASK "Update_Task"
+#define COMMAND_UPDATE_TASK_STATUS "Update_Task_Status"
 #define COMMAND_DELETE_TASK "Delete_Task"
 #define COMMAND_DELETE_BOARD "Delete_Board"
 #define COMMAND_SEPARATOR ","
@@ -26,6 +27,7 @@ typedef enum {
     STATUS_TASK_NOT_FOUND = 203,
     STATUS_EMPTY_TASK = 204,
     STATUS_BOARD_NOT_EMPTY = 205,
+    STATUS_TASK_NOT_EMPTY = 206,
 
     // --- 5xXX: Server/System Errors (500+) ---
     STATUS_SAVE_BOARD_FAIL = 500,
