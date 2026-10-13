@@ -351,12 +351,15 @@ int deleteBoard(Project *project, char *boardId){
     }
     project->totalBoards--;
 
-    if (saveBoard(project, BOARD_FILENAME) != 0){
+    if (saveBoard(project, BOARD_FILENAME) != 0 || saveAllTasks(project, TASK_FILENAME) != 0){
         for (int i = project->totalBoards; i > index; i--){
             project->boards[i] = project->boards[i - 1];
         }
         project->boards[index] = *backup;
         project->totalBoards++;
+
+        saveBoard(project,BOARD_FILENAME);
+        saveAllTasks(project,TASK_FILENAME);
         free(backup);
         return 1;
     }
