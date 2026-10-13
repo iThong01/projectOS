@@ -1,12 +1,15 @@
-
+#define _GNU_SOURCE
 #include "client.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "protocol.h"
 
+int serverConnected = 1;
 int connectToServer(){
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0){
@@ -35,9 +38,11 @@ int sendRequest(int sock, const char *request){
     size_t sent = 0;
 
     while (sent < length) {
-        ssize_t n = send(sock, request + sent,length - sent, 0);
+        ssize_t n = send(sock, request + sent,length - sent,MSG_NOSIGNAL);
+        // ssize_t n = send(sock, request + sent,length - sent, 0);
         if (n <= 0) {
             perror("send");
+            serverConnected = 0;
             return -1;
         }
         sent += (size_t)n;
@@ -51,8 +56,18 @@ int receiveResponse(int sock){
     char* out;
     ssize_t n = recv(sock, response,sizeof(response) - 1, 0);
 
-    if(n <= 0){
-        printf("No response from server.\n");
+    // if(n <= 0){
+    //     printf("No response from server.\n");
+    //     return -1;
+    // }
+    if (n == 0) {
+        printf("ERROR Server disconnected.\n");
+        serverConnected = 0;
+        return -1;
+    }
+    if (n < 0) {
+        perror("ERROR recv");
+        serverConnected = 0;
         return -1;
     }
     response[n] = '\0';
@@ -65,12 +80,55 @@ int receiveResponse(int sock){
         printf("Invalid server response.\n");
         return -1;
     }
+    int statusCode = atoi(status);
 
-    if (strcmp(status, "0") == 0) {
-        printf("%s Done\n", command);
-    } else {
-        printf("%s Failed (Status: %s)\n", command, status);
+    switch (statusCode){
+        case STATUS_OK:
+            printf("%s Done\n", command);
+            break;
+        case STATUS_BOARD_NOT_FOUND:
+            printf("%s Failed: Board not found.\n", command);
+            break;
+        case STATUS_FAIL:
+            printf("%s Failed: Server operation failed.\n", command);
+            break;
+        case STATUS_INVALID_ARGUMENTS:
+            printf("%s Failed: Invalid argument.\n",command);
+            break;
+        case STATUS_EMPTY_BOARD:
+            printf("%s Failed: Board Empty.\n",command);
+            break;
+        case STATUS_TASK_NOT_FOUND:
+            printf("%s Failed: Not found Task.\n",command);
+            break;
+        case STATUS_EMPTY_TASK:
+            printf("%s Failed: Empty Task.\n",command);
+            break;
+        case STATUS_BOARD_NOT_EMPTY:
+            printf("%s Failed: Board not empty.\n",command);
+            break;
+        case STATUS_SAVE_BOARD_FAIL:
+            printf("%s Failed: save board Failed \n",command);
+            break;
+        case STATUS_ADD_BOARD_FAIL:
+            printf("%s Failed: Add Board Failed \n",command);
+            break;
+        case STATUS_SAVE_TASK_FAIL:
+            printf("%s Failed: Save Task Failed\n",command);
+            break;
+        case STATUS_ADD_TASK_FAIL:
+            printf("%s Failed: Add Task Failed\n",command);
+            break;
+        default:
+            printf("%s Failed (Status: %d)\n",
+                   command, statusCode);
+            break;
     }
+    // if (strcmp(status, "0") == 0) {
+    //     printf("%s Done\n", command);
+    // } else {
+    //     printf("%s Failed (Status: %s)\n", command, status);
+    // }
     return 0;
 }
 
@@ -110,16 +168,13 @@ int readInput(char *buffer, size_t size){
 }
 
 void addBoard(int sock){
-    char id[BOARDID_SIZE];
     char title[BOARD_TITLE_SIZE];
     char request[REQUEST_SIZE];
 
-    printf("Enter Board ID : ");
-    if (readInput(id,sizeof(id)) !=0 ) return;
     printf("Enter Board Title: ");
     if(readInput(title, sizeof(title)) != 0) return;
 
-    int n = snprintf(request, sizeof(request),"%s,%s,%s\n",COMMAND_ADD_BOARD,boardId, boardTitle);
+    int n = snprintf(request, sizeof(request),"%s,%s\n",COMMAND_ADD_BOARD, title);
     if (n < 0 || (size_t)n >= sizeof(request)){
         printf("Request is too long.\n");
         return;
@@ -488,15 +543,74 @@ int main(){
     }
 
     printf("Connected to ProjectOS Server!\n");
-    printf("------------------------------------\n");
-    printf("|%-15s|%-20s|\n", "No.", "Menu");
-    printf("------------------------------------\n");
-    printf("|%-15s|%-20s|\n", "1", "Add Board");
-    printf("|%-15s|%-20s|\n", "2", "Add Task");
-    printf("------------------------------------\n");
-
-    // addBoard(sock);
-    updateTaskStatus(sock);
+    char input[32];
+    while(1){
+        printf("\n------------------------------------\n");
+        printf("|%-15s|%-20s|\n", "No.", "Menu");
+        printf("------------------------------------\n");
+        printf("|%-15s|%-20s|\n", "1", "Add Board");
+        printf("|%-15s|%-20s|\n", "2", "Add Task");
+        printf("|%-15s|%-20s|\n", "3", "Read Boards");
+        printf("|%-15s|%-20s|\n", "4", "Read Tasks");
+        printf("|%-15s|%-20s|\n", "5", "Update Board");
+        printf("|%-15s|%-20s|\n", "6", "Update Task");
+        printf("|%-15s|%-20s|\n", "7", "Update Task Status");
+        printf("|%-15s|%-20s|\n", "8", "Delete Board");
+        printf("|%-15s|%-20s|\n", "9", "Delete Task");
+        printf("|%-15s|%-20s|\n", "0", "Exit");
+        printf("------------------------------------\n");
+        printf("\nSelect option: ");
+        if (fgets(input, sizeof(input), stdin) == NULL) {
+            break;
+        }
+        char *end;
+        long choice = strtol(input, &end, 10);
+        if (end == input || (*end != '\n' && *end != '\0')) {
+            printf("Invalid option.\n");
+            continue;
+        }
+        switch (choice){
+            case 1:
+                addBoard(sock);
+                break;
+            case 2:
+                addTask(sock);
+                break;
+            case 3:
+                readBoard(sock);
+                break;
+            case 4:
+                readTask(sock);
+                break;
+            case 5:
+                updateBoard(sock);
+                break;
+            case 6:
+                updateTask(sock);
+                break;
+            case 7:
+                updateTaskStatus(sock);
+                break;
+            case 8:
+                deleteBoard(sock);
+                break;
+            case 9:
+                deleteTask(sock);
+                break;
+            case 0:
+                printf("Goodbye Boooooy!\n");
+                close(sock);
+                return 0;
+            default:
+                printf("Invalid option.\n");
+                break;
+        }
+        if (!serverConnected){
+            printf("\n[ERROR] Connection to server lost.\n");
+            printf("Closing client...\n");
+            break;
+        }
+    }
     close(sock);
     return 0;
 }
