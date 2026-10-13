@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h> //mkdir
+#include <unistd.h> //rmdir
 
 #include "models.h"
 
@@ -407,9 +409,156 @@ void testDeleteBoardTaskPersistence(){
     free(project);
 }
 
+void testUpdateBoardRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Old Board") == 0);
+
+    char *boardId = project->boards[0].boardId;
+    assert(remove(BOARD_FILENAME) == 0);
+    assert(mkdir(BOARD_FILENAME, 0700) == 0);
+    assert(updateBoard(project, boardId, "New Board") == 1);
+    assert(strcmp(project->boards[0].boardTitle, "Old Board") == 0);
+    assert(project->totalBoards == 1);
+    assert(rmdir(BOARD_FILENAME) == 0);
+
+    printf("PASS testUpdateBoardRollback\n");
+    free(project);
+}
+void testUpdateTaskRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+
+    Board *board = &project->boards[0];
+    assert(addTask(project, board->boardId, "Old Task") == 0);
+
+    char *taskId = board->tasks[0].taskId;
+    assert(remove(TASK_FILENAME) == 0);
+    assert(mkdir(TASK_FILENAME, 0700) == 0);
+    assert(updateTask(project, board->boardId,taskId, "New Task") == 1);
+    assert(strcmp(board->tasks[0].taskTitle, "Old Task") == 0);
+    assert(board->totalTasks == 1);
+    assert(rmdir(TASK_FILENAME) == 0);
+
+    printf("PASS testUpdateTaskRollback\n");
+    free(project);
+}
+void testDeleteTaskRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+
+    Board *board = &project->boards[0];
+    assert(addTask(project, board->boardId, "Task 1") == 0);
+    assert(addTask(project, board->boardId, "Task 2") == 0);
+    assert(addTask(project, board->boardId, "Task 3") == 0);
+
+    char taskId[TASKID_SIZE];
+    strcpy(taskId, board->tasks[1].taskId);
+    assert(remove(TASK_FILENAME) == 0);
+    assert(mkdir(TASK_FILENAME, 0700) == 0);
+    assert(deleteTask(project, board->boardId, taskId) == 1);
+    assert(board->totalTasks == 3);
+    assert(strcmp(board->tasks[0].taskTitle, "Task 1") == 0);
+    assert(strcmp(board->tasks[1].taskTitle, "Task 2") == 0);
+    assert(strcmp(board->tasks[2].taskTitle, "Task 3") == 0);
+    assert(strcmp(board->tasks[1].taskId, taskId) == 0);
+    assert(rmdir(TASK_FILENAME) == 0);
+
+    printf("PASS testDeleteTaskRollback\n");
+    free(project);
+}
+void testDeleteBoardRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+    assert(addBoard(project, "Board 2") == 0);
+    assert(addBoard(project, "Board 3") == 0);
+
+    Board *board = &project->boards[1];
+    assert(addTask(project, board->boardId, "Task B") == 0);
+
+    char boardId[BOARDID_SIZE];
+    strcpy(boardId, board->boardId);
+    assert(remove(BOARD_FILENAME) == 0);
+    assert(mkdir(BOARD_FILENAME, 0700) == 0);
+    assert(deleteBoard(project, boardId) == 1);
+    assert(project->totalBoards == 3);
+    assert(strcmp(project->boards[0].boardTitle, "Board 1") == 0);
+    assert(strcmp(project->boards[1].boardTitle, "Board 2") == 0);
+    assert(strcmp(project->boards[2].boardTitle, "Board 3") == 0);
+    assert(strcmp(project->boards[1].boardId, boardId) == 0);
+    assert(project->boards[1].totalTasks == 1);
+    assert(strcmp(project->boards[1].tasks[0].taskTitle, "Task B") == 0);
+    assert(rmdir(BOARD_FILENAME) == 0);
+
+    printf("PASS testDeleteBoardRollback\n");
+    free(project);
+}
+void testAddBoardRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+    assert(remove(BOARD_FILENAME) == 0);
+    assert(mkdir(BOARD_FILENAME, 0700) == 0);
+    assert(addBoard(project, "Board 2") == 1);
+    assert(project->totalBoards == 1);
+    assert(strcmp(project->boards[0].boardTitle,"Board 1") == 0);
+    assert(hasBoard(project, "2") == NULL);
+    assert(rmdir(BOARD_FILENAME) == 0);
+
+    printf("PASS testAddBoardRollback\n");
+    free(project);
+}
+void testAddTaskRollback(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+
+    Board *board = &project->boards[0];
+    assert(addTask(project, board->boardId, "Task 1") == 0);
+
+    char originalTaskId[TASKID_SIZE];
+    strcpy(originalTaskId, board->tasks[0].taskId);
+    assert(remove(TASK_FILENAME) == 0);
+    assert(mkdir(TASK_FILENAME, 0700) == 0);
+    assert(addTask(project, board->boardId, "Task 2") == 1);
+    assert(board->totalTasks == 1);
+    assert(strcmp(board->tasks[0].taskId,originalTaskId) == 0);
+    assert(strcmp(board->tasks[0].taskTitle,"Task 1") == 0);
+    assert(rmdir(TASK_FILENAME) == 0);
+
+    printf("PASS testAddTaskRollback\n");
+    free(project);
+}
+
+void testDeleteBoardPartialSaveFailure(){
+    Project *project = createTestProject();
+    assert(addBoard(project, "Board 1") == 0);
+    assert(addBoard(project, "Board 2") == 0);
+
+    char boardId[BOARDID_SIZE];
+    strcpy(boardId, project->boards[0].boardId);
+    assert(addTask(project, boardId, "Task 1") == 0);
+    assert(remove(TASK_FILENAME) == 0);
+    assert(mkdir(TASK_FILENAME, 0700) == 0);
+    assert(deleteBoard(project, boardId) == 1);
+    assert(project->totalBoards == 2);
+    assert(strcmp(project->boards[0].boardTitle, "Board 1") == 0);
+    assert(strcmp(project->boards[1].boardTitle, "Board 2") == 0);
+    assert(project->boards[0].totalTasks == 1);
+    assert(strcmp(project->boards[0].tasks[0].taskTitle, "Task 1") == 0);
+
+    Project *loaded = createTestProject();
+    assert(readBoard(loaded, BOARD_FILENAME) == 0);
+    assert(loaded->totalBoards == 2);
+    assert(strcmp(loaded->boards[0].boardTitle, "Board 1") == 0);
+    assert(strcmp(loaded->boards[1].boardTitle, "Board 2") == 0);
+
+    free(loaded);
+    assert(rmdir(TASK_FILENAME) == 0);
+
+    printf("PASS testDeleteBoardPartialSaveFailure\n");
+    free(project);
+}
 int main(){
     printf("Start testing all models\n\n");
-
+    {
     printf("Test Positive\n");
     testAddBoardSuccess();
     testAddTaskSuccess();
@@ -418,30 +567,34 @@ int main(){
     testReadBoard();
     testReadTask();
     testLoadProject();
-    
+    }
+    {
     printf("\nTest Board Neg\n");
     testAddTaskBoardNotFound();
     testAddTaskEmptyTitle();
     testAddTaskLongTitle();
     testAddTaskFull();
-
+    }
+    {
     printf("\nTest Update Board\n");
     testUpdateBoardSuccess();
     testUpdateBoardNotFound();
     testUpdateBoardEmptyTitle();
     testUpdateBoardLongTitle();
-
+    }
+    {
     printf("\nTest Update Task\n");
     testUpdateTaskSuccess();
     testUpdateTaskNotFound();
     testUpdateTaskEmptyTitle();
     testUpdateTaskLongTitle();
-
+    }
+    {
     printf("\nTest Del Board\n");
     testDeleteBoardSuccess();
     testDeleteBoardNotFound();
     testDeleteBoardWithTasks();
-
+    }
     printf("\nTest Del Task\n");
     testDeleteTaskSuccess();
     testDeleteTaskNotFound();
@@ -451,6 +604,15 @@ int main(){
     testDeleteTaskPersistence();
     testDeleteBoardTaskPersistence();
 
+    printf("\nroolback\n");
+    testUpdateBoardRollback();
+    testUpdateTaskRollback();
+    testDeleteTaskRollback();
+    testDeleteBoardRollback();
+    testAddBoardRollback();
+    testAddTaskRollback();
+
+    testDeleteBoardPartialSaveFailure();
     printf("\nAll addBoard tests passed!\n");
     return 0;
 }
