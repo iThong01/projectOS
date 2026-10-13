@@ -61,12 +61,12 @@ int receiveResponse(int sock){
     //     return -1;
     // }
     if (n == 0) {
-        printf("ERROR Server disconnected.\n");
+        printf( COLOR_RED "ERROR Server disconnected.\n" COLOR_RESET);
         serverConnected = 0;
         return -1;
     }
     if (n < 0) {
-        perror("ERROR recv");
+        perror(COLOR_RED "ERROR recv" COLOR_RESET);
         serverConnected = 0;
         return -1;
     }
@@ -84,43 +84,43 @@ int receiveResponse(int sock){
 
     switch (statusCode){
         case STATUS_OK:
-            printf("%s Done\n", command);
+            printf(COLOR_GREEN "%s Done\n" COLOR_RESET, command);
             break;
         case STATUS_BOARD_NOT_FOUND:
-            printf("%s Failed: Board not found.\n", command);
+            printf(COLOR_RED"%s Failed: Board not found.\n"COLOR_RESET, command);
             break;
         case STATUS_FAIL:
-            printf("%s Failed: Server operation failed.\n", command);
+            printf(COLOR_RED"%s Failed: Server operation failed.\n"COLOR_RESET, command);
             break;
         case STATUS_INVALID_ARGUMENTS:
-            printf("%s Failed: Invalid argument.\n",command);
+            printf(COLOR_RED"%s Failed: Invalid argument.\n"COLOR_RESET,command);
             break;
         case STATUS_EMPTY_BOARD:
-            printf("%s Failed: Board Empty.\n",command);
+            printf(COLOR_MG"%s Failed: Board Empty.\n"COLOR_RESET,command);
             break;
         case STATUS_TASK_NOT_FOUND:
-            printf("%s Failed: Not found Task.\n",command);
+            printf(COLOR_RED"%s Failed: Not found Task.\n"COLOR_RESET,command);
             break;
         case STATUS_EMPTY_TASK:
-            printf("%s Failed: Empty Task.\n",command);
+            printf(COLOR_MG"%s Failed: Empty Task.\n"COLOR_RESET,command);
             break;
         case STATUS_BOARD_NOT_EMPTY:
-            printf("%s Failed: Board not empty.\n",command);
+            printf(COLOR_MG"%s Failed: Board not empty.\n"COLOR_RESET,command);
             break;
         case STATUS_SAVE_BOARD_FAIL:
-            printf("%s Failed: save board Failed \n",command);
+            printf(COLOR_RED"%s Failed: save board Failed \n"COLOR_RESET,command);
             break;
         case STATUS_ADD_BOARD_FAIL:
-            printf("%s Failed: Add Board Failed \n",command);
+            printf(COLOR_RED"%s Failed: Add Board Failed \n"COLOR_RESET,command);
             break;
         case STATUS_SAVE_TASK_FAIL:
-            printf("%s Failed: Save Task Failed\n",command);
+            printf(COLOR_RED"%s Failed: Save Task Failed\n"COLOR_RESET,command);
             break;
         case STATUS_ADD_TASK_FAIL:
-            printf("%s Failed: Add Task Failed\n",command);
+            printf(COLOR_RED"%s Failed: Add Task Failed\n"COLOR_RESET,command);
             break;
         default:
-            printf("%s Failed (Status: %d)\n",
+            printf(COLOR_RED"%s Failed (Status: %d)\n"COLOR_RESET,
                    command, statusCode);
             break;
     }
@@ -176,11 +176,11 @@ void addBoard(int sock){
 
     int n = snprintf(request, sizeof(request),"%s,%s\n",COMMAND_ADD_BOARD, title);
     if (n < 0 || (size_t)n >= sizeof(request)){
-        printf("Request is too long.\n");
+        printf(COLOR_RED "Request is too long.\n" COLOR_RESET);
         return;
     }
     if (sendRequest(sock, request) != 0){
-        printf("Failed to send request.\n");
+        printf(COLOR_RED "Failed to send request.\n" COLOR_RESET);
         return;
     }
     receiveResponse(sock);
@@ -509,64 +509,69 @@ void deleteBoard(int sock){
         printf("Failed to receive server response.\n");
     }
 }
-
 void deleteTask(int sock){
     char boardId[BOARDID_SIZE];
     char taskId[TASKID_SIZE];
     char request[BOARDID_SIZE + TASKID_SIZE + 64];
 
-    printf("Enter Board ID: ");
+    printf(COLOR_BLUE"Enter Board ID: "COLOR_RESET);
     if (readInput(boardId, sizeof(boardId)) != 0) return;
 
-    printf("Enter Task ID: ");
+    printf(COLOR_BLUE"Enter Task ID: "COLOR_RESET);
     if (readInput(taskId, sizeof(taskId)) != 0) return;
 
     int n = snprintf(request, sizeof(request),"%s,%s,%s\n",COMMAND_DELETE_TASK,boardId,taskId);
     if (n < 0 || (size_t)n >= sizeof(request)){
-        printf("Request is too long.\n");
+        printf(COLOR_RED"Request is too long.\n"COLOR_RESET);
         return;
     }
     if (sendRequest(sock, request) != 0){
-        printf("Failed to send request.\n");
+        printf(COLOR_RED"Failed to send request.\n"COLOR_RESET);
         return;
     }
     if (receiveResponse(sock) != 0){
-        printf("Failed to receive server response.\n");
+        printf(COLOR_RED"Failed to receive server response.\n"COLOR_RESET);
     }
 }
 
 int main(){
     int sock = connectToServer();
     if(sock < 0){
-        printf("Cannot connect to server.\n");
+        printf(COLOR_RED"Cannot connect to server.\n"COLOR_RESET);
         return 1;
     }
 
-    printf("Connected to ProjectOS Server!\n");
+    printf(COLOR_GREEN"Connected to ProjectOS Server!\n"COLOR_RESET);
     char input[32];
     while(1){
-        printf("\n------------------------------------\n");
-        printf("|%-15s|%-20s|\n", "No.", "Menu");
-        printf("------------------------------------\n");
-        printf("|%-15s|%-20s|\n", "1", "Add Board");
-        printf("|%-15s|%-20s|\n", "2", "Add Task");
-        printf("|%-15s|%-20s|\n", "3", "Read Boards");
-        printf("|%-15s|%-20s|\n", "4", "Read Tasks");
-        printf("|%-15s|%-20s|\n", "5", "Update Board");
-        printf("|%-15s|%-20s|\n", "6", "Update Task");
-        printf("|%-15s|%-20s|\n", "7", "Update Task Status");
-        printf("|%-15s|%-20s|\n", "8", "Delete Board");
-        printf("|%-15s|%-20s|\n", "9", "Delete Task");
-        printf("|%-15s|%-20s|\n", "0", "Exit");
-        printf("------------------------------------\n");
-        printf("\nSelect option: ");
+        printf("\n");
+        printf(COLOR_CYAN COLOR_BOLD "============= PROJECT OS MENU =============\n" COLOR_RESET);
+
+        printf(COLOR_CYAN "|%-15s|%-20s|\n" COLOR_RESET, "No.", "Menu");
+        printf(COLOR_CYAN "---------------------------------------\n" COLOR_RESET);
+
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "1", "Add Board");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "2", "Add Task");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "3", "Read Boards");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "4", "Read Tasks");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "5", "Update Board");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "6", "Update Task");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_WH "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "7", "Update Task Status");
+
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_RED "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "8", "Delete Board");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_RED "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "9", "Delete Task");
+        printf(COLOR_CYAN "|%-15s|" COLOR_RESET COLOR_RED "%-20s" COLOR_CYAN "|\n" COLOR_RESET, "0", "Exit");
+
+        printf(COLOR_CYAN "---------------------------------------\n" COLOR_RESET);
+
+        printf("\n" COLOR_GREEN COLOR_BOLD "Select option: " COLOR_RESET);
         if (fgets(input, sizeof(input), stdin) == NULL) {
             break;
         }
         char *end;
         long choice = strtol(input, &end, 10);
         if (end == input || (*end != '\n' && *end != '\0')) {
-            printf("Invalid option.\n");
+            printf(COLOR_RED"Invalid option.\n"COLOR_RESET);
             continue;
         }
         switch (choice){
@@ -598,16 +603,16 @@ int main(){
                 deleteTask(sock);
                 break;
             case 0:
-                printf("Goodbye Boooooy!\n");
+                printf(COLOR_YELLOW"Goodbye Boooooy!\n"COLOR_RESET);
                 close(sock);
                 return 0;
             default:
-                printf("Invalid option.\n");
+                printf(COLOR_RED"Invalid option.\n"COLOR_RESET);
                 break;
         }
         if (!serverConnected){
-            printf("\n[ERROR] Connection to server lost.\n");
-            printf("Closing client...\n");
+            printf(COLOR_RED"\n[ERROR] Connection to server lost.\n"COLOR_RESET);
+            printf(COLOR_YELLOW"Closing client...\n"COLOR_RESET);
             break;
         }
     }
