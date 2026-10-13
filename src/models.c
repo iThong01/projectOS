@@ -364,15 +364,18 @@ int deleteBoard(Project *project, char *boardId){
     return 0;
 }
 int updateBoard(Project *project, char *boardId, char *newTitle){
+    if (project == NULL || boardId == NULL || newTitle == NULL) return 1;
+    if (isEmptyOrSpace(boardId) || isEmptyOrSpace(newTitle)) return 1;
+
     Board *board = hasBoard(project, boardId);
     if (board == NULL) return 1;
-    if (newTitle == NULL || strlen(newTitle) >= BOARD_TITLE_SIZE) return 1;
+    if (strlen(newTitle) >= BOARD_TITLE_SIZE) return 1;
 
     char oldTitle[BOARD_TITLE_SIZE];
     strcpy(oldTitle, board->boardTitle);
     strncpy(board->boardTitle,newTitle,sizeof(board->boardTitle)-1);
     board->boardTitle[sizeof(board->boardTitle)-1] = '\0';
-
+    
     if (saveBoard(project, BOARD_FILENAME) != 0){
         strcpy(board->boardTitle, oldTitle);
         return 1;
@@ -380,15 +383,15 @@ int updateBoard(Project *project, char *boardId, char *newTitle){
     return 0;
 }
 int updateTask(Project *project, char *boardId,char *taskId, char *newTitle){
+    if(project == NULL || boardId == NULL || taskId == NULL || newTitle == NULL) return 1;
     Task *task = hasTask(project, boardId, taskId);
     if (task == NULL) return 1;
-    if (newTitle == NULL || strlen(newTitle) >= TASK_TITLE_SIZE) return 1;
+    if (strlen(newTitle) >= TASK_TITLE_SIZE) return 1;
+    if (isEmptyOrSpace(boardId) || isEmptyOrSpace(taskId) || isEmptyOrSpace(newTitle)) return 1;
 
     char oldTitle[TASK_TITLE_SIZE];
     strcpy(oldTitle, task->taskTitle);
-    strncpy(task->taskTitle, newTitle,sizeof(task->taskTitle) - 1);
-
-    task->taskTitle[sizeof(task->taskTitle) - 1] = '\0';
+    strcpy(task->taskTitle, newTitle);
     if (saveAllTasks(project, TASK_FILENAME) != 0){
         strcpy(task->taskTitle, oldTitle);
         return 1;
