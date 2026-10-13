@@ -226,16 +226,22 @@ static int getNextBoardId(Project *project){
     return maxId + 1;
 }
 int addBoard(Project *project, char *boardTitle){
-    if(project == NULL || boardTitle ==NULL) return 1;
-    if(project->totalBoards >= MAX_BOARD) return 1; 
+    if (project == NULL || boardTitle == NULL) return 1;
+    if (project->totalBoards >= MAX_BOARD) return 1;
     if(isEmptyOrSpace(boardTitle)) return 1;
-    Board *board = &project->boards[project->totalBoards];
-    snprintf(board->boardId,sizeof(board->boardId), "%d" , getNextBoardId(project));
-    strncpy(board->boardTitle,boardTitle,sizeof(board->boardTitle)-1);
+    if (strlen(boardTitle) >= BOARD_TITLE_SIZE) return 1;
 
-    board->boardTitle[sizeof(board->boardTitle)-1] = '\0';
+    Board *board = &project->boards[project->totalBoards];
+    int n = snprintf(board->boardId, sizeof(board->boardId), "%d", getNextBoardId(project));
+
+    if (n < 0 || (size_t)n >= sizeof(board->boardId)) return 1;
+    strcpy(board->boardTitle, boardTitle);
     board->totalTasks = 0;
     project->totalBoards++;
+    if (saveBoard(project, BOARD_FILENAME) != 0){// Rollback
+        project->totalBoards--;
+        return 1;
+    }
     return 0;
 }
 static int getNextTaskId(Board *board){
@@ -246,16 +252,25 @@ static int getNextTaskId(Board *board){
     }
     return maxId + 1;
 }
-int addTask(Board *board, char *taskTitle){
-    if(board == NULL || taskTitle ==NULL) return 1;
-    if(board->totalTasks >= MAX_TASK) return 1;
-    if(isEmptyOrSpace(taskTitle)) return 1;
+int addTask(Project *project,Board *boardId, char *taskTitle){
+    if (project == NULL || boardId == NULL || taskTitle == NULL) return 1;
+    if (isEmptyOrSpace(boardId) || isEmptyOrSpace(taskTitle)) return 1;
+    if (strlen(taskTitle) >= TASK_TITLE_SIZE) return 1;
+
+    Board *board = hasBoard(project, boardId);
+    if(board == NULL || board->totalTasks >= MAX_TASK ) return 1;
+
     Task *task = &board->tasks[board->totalTasks];
-    snprintf(task->taskId, sizeof(task->taskId), "%d", getNextTaskId(board));
-    strncpy(task->taskTitle, taskTitle,sizeof(task->taskTitle) - 1);
-    task->taskTitle[sizeof(task->taskTitle) - 1] ='\0';
+    int n = snprintf(task->taskId,sizeof(task->taskId),"%d", getNextTaskId(board));
+
+    if (n < 0 || (size_t)n >= sizeof(task->taskId)) return 1;
+    strcpy(task->taskTitle, taskTitle);
     task->isFinish = 0;
     board->totalTasks++;
+    if (saveAllTasks(project, TASK_FILENAME) != 0){ // Rollback
+        board->totalTasks--;
+        return 1;
+    }
     return 0;
 }
 Board *hasBoard(Project *project,char *boardId){

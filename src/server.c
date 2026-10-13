@@ -14,11 +14,10 @@ void handleAddBoard(CommandContext *ctx){
   char *boardTitle = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
 
   char response[MESSAGE_SIZE];
-
-  if (isEmptyOrSpace(boardTitle))
+  int status;
+  if (isEmptyOrSpace(boardTitle) || strlen(boardTitle) >= BOARD_TITLE_SIZE)
   {
-    snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_BOARD, COMMAND_SEPARATOR, STATUS_INVALID_ARGUMENTS);
-    send(ctx->clientSocket, response, strlen(response), 0);
+    status = STATUS_INVALID_ARGUMENTS;
   }
   else
   {
@@ -27,20 +26,13 @@ void handleAddBoard(CommandContext *ctx){
 
     // 2. CRITICAL SECTION: Only one process can be here at a time
     int result = addBoard(ctx->project, boardTitle);
-    saveBoard(ctx->project, BOARD_FILENAME);
+
     // 3. Release the lock
     sem_post(sem);
-    if (result == 0)
-    {
-      snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_BOARD, COMMAND_SEPARATOR, STATUS_OK);
-      send(ctx->clientSocket, response, strlen(response), 0);
-    }
-    else
-    {
-      snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_BOARD, COMMAND_SEPARATOR, STATUS_FAIL);
-      send(ctx->clientSocket, response, strlen(response), 0);
-    }
+    status = (result == 0 ) ? STATUS_OK : STATUS_FAIL;
   }
+  snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_BOARD, COMMAND_SEPARATOR, status);
+  send(ctx->clientSocket,response,strlen(response),0);
 }
 void handleAddTask(CommandContext *ctx)
 {
@@ -48,42 +40,26 @@ void handleAddTask(CommandContext *ctx)
     char *taskTitle = strtok_r(NULL, COMMAND_SEPARATOR, &ctx->rawInput);
 
     char response[MESSAGE_SIZE];
-
+    int status;
     if (boardId == NULL || taskTitle == NULL ||
         isEmptyOrSpace(boardId) || isEmptyOrSpace(taskTitle))
     {
-        snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_TASK, COMMAND_SEPARATOR, STATUS_INVALID_ARGUMENTS);
-        send(ctx->clientSocket, response, strlen(response), 0);
-        return;
+        status = STATUS_INVALID_ARGUMENTS;
+    }else{
+      sem_wait(sem);
+      Board *board = hasBoard(ctx->project, boardId);
+      if (board == NULL)
+      {
+        status = STATUS_BOARD_NOT_FOUND;
+      }else if(board->totalTasks >= MAX_TASK){
+        status = STATUS_FAIL;
+      }else{
+        int result = addTask(ctx->project, boardId,taskTitle);
+        status = (result ==0) ? STATUS_OK : STATUS_FAIL;
+      }
+      sem_post(sem);
     }
-
-    Board *board = hasBoard(ctx->project, boardId);
-
-    if (board == NULL)
-    {
-        snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_TASK, COMMAND_SEPARATOR, STATUS_BOARD_NOT_FOUND);
-        send(ctx->clientSocket, response, strlen(response), 0);
-        return;
-    }
-
-    // 1. Wait for the lock
-    sem_wait(sem);
-
-    // 2. CRITICAL SECTION
-    int result = addTask(board, taskTitle);
-    saveAllTasks(ctx->project, TASK_FILENAME);
-
-    // 3. Release the lock
-    sem_post(sem);
-
-    if (result == 0)
-    {
-        snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_TASK, COMMAND_SEPARATOR, STATUS_OK);
-    }
-    else
-    {
-        snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_TASK, COMMAND_SEPARATOR, STATUS_FAIL);
-    }
+    snprintf(response, sizeof(response), "%s%s%d\n", COMMAND_ADD_TASK, COMMAND_SEPARATOR, status);
     send(ctx->clientSocket, response, strlen(response), 0);
 }
 void handleGetBoards(CommandContext *ctx){
