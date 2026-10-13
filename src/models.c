@@ -252,7 +252,7 @@ static int getNextTaskId(Board *board){
     }
     return maxId + 1;
 }
-int addTask(Project *project,Board *boardId, char *taskTitle){
+int addTask(Project *project,char *boardId, char *taskTitle){
     if (project == NULL || boardId == NULL || taskTitle == NULL) return 1;
     if (isEmptyOrSpace(boardId) || isEmptyOrSpace(taskTitle)) return 1;
     if (strlen(taskTitle) >= TASK_TITLE_SIZE) return 1;

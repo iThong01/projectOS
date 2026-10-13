@@ -16,7 +16,7 @@ int receiveResponse(int socket);
 
 void addBoard(int socket);
 void addTask(int socket); 
-void readBoard(int socket); //here <-
+void readBoard(int socket);
 void readTask(int socket);
 void updateBoard(int socket);
 void updateTask(int socket);
