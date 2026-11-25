@@ -27,7 +27,6 @@ typedef enum {
     STATUS_TASK_NOT_FOUND = 203,
     STATUS_EMPTY_TASK = 204,
     STATUS_BOARD_NOT_EMPTY = 205,
-    STATUS_TASK_NOT_EMPTY = 206,
 
     // --- 5xXX: Server/System Errors (500+) ---
     STATUS_SAVE_BOARD_FAIL = 500,

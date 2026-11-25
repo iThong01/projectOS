@@ -428,11 +428,14 @@ int setup(char *port)
     if (pid == 0)
     { // child process
       CLOSESOCKET(socket_listen);
-
+      char read[1024];
+      char commandBuffer[4096];
+      size_t commandLength = 0;
+      int discardingCommand = 0;
       while (1)
       {
-        char read[1024];
-        int bytes_received = recv(socket_client, read, sizeof(read) - 1, 0);
+        // char read[1024];
+        int bytes_received = recv(socket_client, read, sizeof(read), 0);
         if (bytes_received < 1)
         {
           printf("Client disconnected.\n");
@@ -440,15 +443,41 @@ int setup(char *port)
           CLOSESOCKET(socket_client);
           exit(0);
         }
-        read[bytes_received] = '\0';
-        
-        int j;
-        for (j = 0; j < bytes_received; ++j)
-          read[j] = read[j];
+        for (int i = 0; i < bytes_received; i++){
+          char ch = read[i];
+          if (discardingCommand){
+            if (ch == '\n'){
+                discardingCommand = 0;
+                commandLength = 0;
+            }
+            continue;
+          }
+          if (commandLength >= sizeof(commandBuffer) - 1){
+            printf("Command too long!\n");
+            commandLength = 0;
+            discardingCommand = 1;
+            if (ch == '\n') discardingCommand = 0;
+            continue;
+          }
+          commandBuffer[commandLength] = ch;
+          commandLength++;
+          if (read[i] == '\n'){
+            commandBuffer[commandLength - 1] = '\0';
+            handleClient(socket_client, commandBuffer);
+            commandLength = 0;
+          }
+        }
+        commandBuffer[commandLength] = '\0';
 
-        printf("%s\n", read);
-        replace_char(read, '\n', '\0');
-        handleClient(socket_client, read);
+        // read[bytes_received] = '\0';
+        
+        // int j;
+        // for (j = 0; j < bytes_received; ++j)
+        //   read[j] = read[j];
+
+        // printf("%s\n", read);
+        // replace_char(read, '\n', '\0');
+        // handleClient(socket_client, read);
       }
     }
     CLOSESOCKET(socket_client);

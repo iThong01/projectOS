@@ -19,7 +19,7 @@ int main(){
 
     assert(connect(sock, (struct sockaddr *)&server, sizeof(server)) == 0);
 
-    char oversized[1000];
+    char oversized[5000];
     memset(oversized, 'A', sizeof(oversized));
     memcpy(oversized, "Add_Board,", strlen("Add_Board,"));
 
